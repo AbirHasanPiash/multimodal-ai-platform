@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     DATABASE_URL: str
     REDIS_URL: str
+    GOOGLE_CLIENT_ID: str
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

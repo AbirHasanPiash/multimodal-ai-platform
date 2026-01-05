@@ -1,8 +1,8 @@
-"""Initial tables
+"""Change credits to BigInteger
 
-Revision ID: caeb9620e75b
+Revision ID: 3a193453a64a
 Revises: 
-Create Date: 2026-01-01 00:21:27.886830
+Create Date: 2026-01-05 12:32:35.372542
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'caeb9620e75b'
+revision: str = '3a193453a64a'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -36,8 +36,7 @@ def upgrade() -> None:
     op.create_table('wallets',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('user_id', sa.UUID(), nullable=False),
-    sa.Column('balance', sa.Numeric(precision=10, scale=2), nullable=False),
-    sa.Column('currency', sa.String(), nullable=False),
+    sa.Column('credits', sa.BigInteger(), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id'),
