@@ -50,3 +50,21 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
     return user
+
+
+async def verify_token_socket(token: str, db: AsyncSession) -> User | None:
+    """
+    Special authentication helper for WebSockets.
+    Returns User object or None if invalid.
+    """
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            return None
+    except JWTError:
+        return None
+    
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    return user

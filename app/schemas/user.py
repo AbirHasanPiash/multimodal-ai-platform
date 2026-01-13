@@ -1,5 +1,7 @@
 from uuid import UUID
 from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic.fields import Field
+from decimal import Decimal
 
 # Auth & Input Schemas
 class UserBase(BaseModel):
@@ -22,7 +24,7 @@ class Token(BaseModel):
 
 class WalletResponse(BaseModel):
     id: UUID
-    credits: int
+    credits: Decimal = Field(..., description="Current balance")
     
     model_config = ConfigDict(from_attributes=True)
 

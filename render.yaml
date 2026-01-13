@@ -1,0 +1,24 @@
+services:
+  # Web Service (FastAPI)
+  - type: web
+    name: fastapi-app
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: fastapi-redis
+          property: connectionString
+    healthCheckPath: /health
+
+  # Redis Service
+  - type: redis
+    name: fastapi-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
