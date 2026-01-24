@@ -81,7 +81,7 @@ jobs:
                 image: ghcr.io/abirhasanpiash/multimodal-ai-platform:latest
                 container_name: fastapi_worker
                 restart: always
-                command: celery -A app.main.celery_app worker --loglevel=info
+                command: celery -A app.workers.tasks.celery_app worker --loglevel=info
                 volumes:
                   - ./secrets/google_credentials.json:/app/google_credentials.json
                 env_file: .env
