@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1.endpoints import auth, users, chat
+from app.api.v1.endpoints import auth, users, chat, media
 from app.core.config import settings
 
 app = FastAPI(title=settings.PROJECT_NAME)
@@ -17,6 +17,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 app.include_router(users.router, prefix=f"{settings.API_V1_STR}/users", tags=["users"])
 app.include_router(chat.router, prefix=f"{settings.API_V1_STR}/chat", tags=["chat"])
+app.include_router(media.router, prefix=f"{settings.API_V1_STR}/media", tags=["media"])
 
 @app.get("/")
 def read_root():

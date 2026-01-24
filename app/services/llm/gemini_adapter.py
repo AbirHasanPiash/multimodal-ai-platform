@@ -1,3 +1,4 @@
+import base64
 from google import genai
 from google.genai import types
 from decimal import Decimal
@@ -20,11 +21,24 @@ class GeminiAdapter(LLMProvider):
 
         # Pricing (USD per 1M tokens)
         self.pricing = {
-            "gemini-2.5-pro": {"input": Decimal("3.50"), "output": Decimal("10.50")},
-            "gemini-3-pro-preview": {"input": Decimal("3.50"), "output": Decimal("10.50")},
-            "gemini-3-flash-preview": {"input": Decimal("0.35"), "output": Decimal("1.05")},
-            "gemini-2.5-flash": {"input": Decimal("0.35"), "output": Decimal("1.05")},
+            "gemini-3-pro-preview": {
+                "input": Decimal("3.00"),
+                "output": Decimal("15.00"),
+            },
+            "gemini-2.5-pro": {
+                "input": Decimal("1.88"),
+                "output": Decimal("12.50"),
+            },
+            "gemini-3-flash-preview": {
+                "input": Decimal("0.50"),
+                "output": Decimal("3.00"),
+            },
+            "gemini-2.5-flash": {
+                "input": Decimal("0.30"),
+                "output": Decimal("2.50"),
+            },
         }
+
 
     def calculate_cost(self, usage: Usage, model: str) -> Decimal:
         """
@@ -55,25 +69,52 @@ class GeminiAdapter(LLMProvider):
 
         for item in items:
             role = ""
-            content_text = ""
+            parts = []
 
+            # 1. Extract Role
             if isinstance(item, ChatMessage):
                 role = item.role
-                content_text = "".join(b.text for b in item.content)
             elif isinstance(item, dict):
                 role = item.get("role", "user")
-                content_text = item.get("content", "")
 
+            # 2. Build Parts from Content & Attachments
+            if isinstance(item, ChatMessage):
+                # Add main text content
+                text_content = "".join(b.text for b in item.content)
+                if text_content:
+                    parts.append(types.Part.from_text(text=text_content))
+                
+                # Add Attachments
+                if item.attachments:
+                    for att in item.attachments:
+                        if att.type == "text":
+                            # Combine text attachments into a text part
+                            parts.append(types.Part.from_text(text=f"\n[Attachment: {att.content}]"))
+                        elif att.type == "image":
+                            # Decode base64 string to bytes for Gemini SDK
+                            img_bytes = base64.b64decode(att.content)
+                            parts.append(types.Part.from_bytes(
+                                data=img_bytes, 
+                                mime_type=att.mime_type or "image/jpeg"
+                            ))
+            elif isinstance(item, dict):
+                # Fallback for dict-based prompt
+                content_text = item.get("content", "")
+                if content_text:
+                    parts.append(types.Part.from_text(text=content_text))
+
+            # 3. Assign to Role
             if role == "system":
-                system_parts.append(content_text)
+                # System instructions are text-only in this simplified adapter
+                for p in parts:
+                    if p.text:
+                        system_parts.append(p.text)
             elif role == "user":
-                contents_list.append(
-                    types.Content(role="user", parts=[types.Part.from_text(text=content_text)])
-                )
+                if parts:
+                    contents_list.append(types.Content(role="user", parts=parts))
             elif role in ["ai", "assistant", "model"]:
-                contents_list.append(
-                    types.Content(role="model", parts=[types.Part.from_text(text=content_text)])
-                )
+                if parts:
+                    contents_list.append(types.Content(role="model", parts=parts))
 
         system_instruction = "\n".join(system_parts) if system_parts else None
         return system_instruction, contents_list

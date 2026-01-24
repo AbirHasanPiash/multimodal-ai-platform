@@ -33,6 +33,7 @@ class UserResponse(BaseModel):
     email: EmailStr
     full_name: str | None = None
     is_active: bool
+    is_superuser: bool
     wallet: WalletResponse | None = None
 
     model_config = ConfigDict(from_attributes=True)

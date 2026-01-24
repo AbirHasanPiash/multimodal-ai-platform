@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Integer, Numeric
+from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Integer, Numeric, JSON, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -27,6 +27,7 @@ class Message(Base):
     
     role = Column(String, nullable=False)
     content = Column(Text, nullable=False)
+    attachments = Column(JSON, default=list)
     model = Column(String, nullable=True)
     
     tokens = Column(Integer, default=0)
@@ -34,3 +35,7 @@ class Message(Base):
     created_at = Column(DateTime(timezone=True), default=utc_now)
     
     chat = relationship("Chat", back_populates="messages")
+
+    __table_args__ = (
+        Index('ix_messages_chat_id_created_at', 'chat_id', 'created_at'),
+    )

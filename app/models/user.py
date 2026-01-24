@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Numeric
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Numeric, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -16,18 +16,23 @@ class User(Base):
     hashed_password = Column(String, nullable=True)
     full_name = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    is_superuser = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=utc_now)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
     wallet = relationship("Wallet", back_populates="user", uselist=False, cascade="all, delete-orphan")
     chats = relationship("Chat", back_populates="user")
+    audios = relationship("GeneratedAudio", back_populates="user", cascade="all, delete-orphan")
+    images = relationship("GeneratedImage", back_populates="user", cascade="all, delete-orphan")
+    videos = relationship("GeneratedVideo", back_populates="user", cascade="all, delete-orphan")
+
 
 class Wallet(Base):
     __tablename__ = "wallets"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), unique=True, nullable=False)
-    credits = Column(Numeric(18, 6), default=0.000000, nullable=False)
+    credits = Column(Numeric(18, 6), default=10.000000, server_default=text("10.0"), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
     
     user = relationship("User", back_populates="wallet")

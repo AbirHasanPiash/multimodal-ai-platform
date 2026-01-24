@@ -1,7 +1,7 @@
 import json
 import openai
 from decimal import Decimal
-from typing import AsyncGenerator, List, Dict
+from typing import AsyncGenerator, List, Dict, Union
 from app.core.config import settings
 from app.services.llm.base import LLMProvider, PromptType
 from app.services.llm.usage import Usage
@@ -23,9 +23,9 @@ class OpenAIAdapter(LLMProvider):
 
         # Pricing (USD per 1M tokens)
         self.pricing = {
-            "gpt-5.2-pro": {"input": Decimal("5.00"), "output": Decimal("15.00")},
-            "gpt-5.2": {"input": Decimal("2.50"), "output": Decimal("10.00")},
-            "gpt-5-mini": {"input": Decimal("0.15"), "output": Decimal("0.60")},
+            "gpt-5.2-pro": {"input": Decimal("21.00"), "output": Decimal("168.00")},
+            "gpt-5.2": {"input": Decimal("1.75"), "output": Decimal("14.00")},
+            "gpt-5-mini": {"input": Decimal("0.25"), "output": Decimal("2.00")},
         }
 
     def calculate_cost(self, usage: Usage, model: str) -> Decimal:
@@ -50,17 +50,21 @@ class OpenAIAdapter(LLMProvider):
         # Round to 6 decimal places to match DB
         return total_price_to_user.quantize(Decimal("0.000001"))
 
-    def _to_openai_messages(self, prompt: PromptType) -> List[Dict[str, str]]:
+    def _to_openai_messages(self, prompt: PromptType) -> List[Dict[str, Union[str, list]]]:
         messages = []
+        
+        # Simple String Prompt
         if isinstance(prompt, str):
             return [{"role": "user", "content": prompt}]
 
+        # List of Messages (ChatMessage objects or dicts)
         for item in prompt:
             if isinstance(item, ChatMessage):
-                role = "assistant" if item.role == "ai" else item.role
-                content = "".join(b.text for b in item.content)
-                messages.append({"role": role, "content": content})
+                # Use the new helper method that handles attachments/multimodal logic
+                messages.append(item.to_openai_format())
+                
             elif isinstance(item, dict):
+                # Legacy dict support
                 role = "assistant" if item.get("role") == "ai" else item.get("role", "user")
                 messages.append({"role": role, "content": item.get("content", "")})
                 

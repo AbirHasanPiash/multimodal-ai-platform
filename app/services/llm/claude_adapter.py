@@ -1,6 +1,6 @@
 import anthropic
 from decimal import Decimal
-from typing import AsyncGenerator, List, Dict, Tuple
+from typing import AsyncGenerator, List, Dict, Tuple, Any
 from app.core.config import settings
 from app.services.llm.base import LLMProvider, PromptType
 from app.services.llm.usage import Usage
@@ -19,12 +19,12 @@ class ClaudeAdapter(LLMProvider):
             )
         self.client = ClaudeAdapter._client
 
-        # Pricing (USD per 1M tokens)
         self.pricing = {
-            "claude-4.5-opus":   {"input": Decimal("15.00"), "output": Decimal("75.00")},
+            "claude-4.5-opus":   {"input": Decimal("5.00"),  "output": Decimal("25.00")},
             "claude-4.5-sonnet": {"input": Decimal("3.00"),  "output": Decimal("15.00")},
-            "claude-4.5-haiku":  {"input": Decimal("0.25"),  "output": Decimal("1.25")},
+            "claude-4.5-haiku":  {"input": Decimal("1.00"),  "output": Decimal("5.00")},
         }
+
         
         self.model_mapping = {
             "claude-4.5-opus": "claude-opus-4-5-20251101",
@@ -47,7 +47,7 @@ class ClaudeAdapter(LLMProvider):
 
         return total_price_to_user.quantize(Decimal("0.000001"))
 
-    def _prepare_claude_request(self, prompt: PromptType) -> Tuple[str, List[Dict[str, str]]]:
+    def _prepare_claude_request(self, prompt: PromptType) -> Tuple[str, List[Dict[str, Any]]]:
         system_prompt = ""
         messages = []
         items = []
@@ -59,21 +59,58 @@ class ClaudeAdapter(LLMProvider):
 
         for item in items:
             role = ""
-            content = ""
+            content_blocks: List[Dict[str, Any]] = []
 
+            # 1. Parse Input Item
             if isinstance(item, ChatMessage):
                 role = item.role
-                content = "".join(b.text for b in item.content)
+                
+                # Add Attachments first (Images then Text)
+                if item.attachments:
+                    for att in item.attachments:
+                        if att.type == "image":
+                            content_blocks.append({
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": att.mime_type or "image/jpeg",
+                                    "data": att.content
+                                }
+                            })
+                        elif att.type == "text":
+                            content_blocks.append({
+                                "type": "text",
+                                "text": f"<file_context>\n{att.content}\n</file_context>"
+                            })
+                
+                # Add main text
+                text_body = "".join(b.text for b in item.content)
+                if text_body:
+                    content_blocks.append({
+                        "type": "text", 
+                        "text": text_body
+                    })
+
             elif isinstance(item, dict):
                 role = item.get("role", "user")
-                content = item.get("content", "")
+                text_content = item.get("content", "")
+                if text_content:
+                    content_blocks.append({"type": "text", "text": text_content})
 
+            # 2. Assign to specific role
             if role == "system":
-                system_prompt += content + "\n"
+                # Claude handles system prompt via top-level parameter
+                for block in content_blocks:
+                    if block["type"] == "text":
+                        system_prompt += block["text"] + "\n"
+            
             elif role == "user":
-                messages.append({"role": "user", "content": content})
+                if content_blocks:
+                    messages.append({"role": "user", "content": content_blocks})
+            
             elif role in ["ai", "assistant"]:
-                messages.append({"role": "assistant", "content": content})
+                if content_blocks:
+                    messages.append({"role": "assistant", "content": content_blocks})
 
         return system_prompt.strip(), messages
 

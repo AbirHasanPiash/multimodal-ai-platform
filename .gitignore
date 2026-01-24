@@ -8,6 +8,7 @@ __pycache__/
 *.pyd
 *.pyc
 
+
 # Virtual environments
 venv/
 .env/
@@ -91,3 +92,5 @@ docker-data/
 *.crt
 secrets/
 credentials/
+
+google_credentials.json

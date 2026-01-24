@@ -39,3 +39,24 @@ class ChatCache:
             history_objects.append(obj)
             
         return history_objects
+    
+    async def save_temp_file(self, file_id: str, file_data: dict):
+        """
+        Stores file content (base64 or text) in Redis with an expiration.
+        """
+        key = f"temp_file:{file_id}"
+        await self.redis.setex(
+            key,
+            self.ttl,
+            json.dumps(file_data)
+        )
+
+    async def get_temp_file(self, file_id: str) -> dict | None:
+        """
+        Retrieves file content by ID.
+        """
+        key = f"temp_file:{file_id}"
+        data = await self.redis.get(key)
+        if data:
+            return json.loads(data)
+        return None

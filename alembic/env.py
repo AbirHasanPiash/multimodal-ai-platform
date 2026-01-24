@@ -10,6 +10,7 @@ from alembic import context
 from app.core.database import Base
 from app.models.user import User, Wallet
 from app.models.chat import Chat, Message
+from app.models.media import GeneratedAudio, GeneratedImage, GeneratedVideo
 
 from app.core.config import settings
 
