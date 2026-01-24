@@ -7,7 +7,10 @@ app = FastAPI(title=settings.PROJECT_NAME)
 
 origins = [
     "https://multiaimodel.com",
+    "https://www.multiaimodel.com",
+    "https://multimodal-ai-five.vercel.app",
     "http://localhost:8000",
+    "http://localhost:3000",
     "http://localhost:5173",
 ]
 
