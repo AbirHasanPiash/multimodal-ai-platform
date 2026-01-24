@@ -1,0 +1,103 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  # Docker requires lowercase image names
+  REGISTRY: ghcr.io
+  IMAGE_NAME: abirhasanpiash/multimodal-ai-platform
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: type=raw,value=latest
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Login to GitHub Container Registry
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            # Pull the latest image
+            docker pull ghcr.io/abirhasanpiash/multimodal-ai-platform:latest
+            
+            # Generate the Production docker-compose.yml
+            cat <<EOF > docker-compose.yml
+            version: '3.8'
+            services:
+              web:
+                image: ghcr.io/abirhasanpiash/multimodal-ai-platform:latest
+                container_name: fastapi_web
+                restart: always
+                command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+                volumes:
+                  - ./secrets/google_credentials.json:/app/google_credentials.json
+                env_file: .env
+                ports:
+                  - "8000:8000"
+                depends_on:
+                  - redis
+
+              worker:
+                image: ghcr.io/abirhasanpiash/multimodal-ai-platform:latest
+                container_name: fastapi_worker
+                restart: always
+                command: celery -A app.main.celery_app worker --loglevel=info
+                volumes:
+                  - ./secrets/google_credentials.json:/app/google_credentials.json
+                env_file: .env
+                depends_on:
+                  - redis
+
+              redis:
+                image: redis:alpine
+                container_name: fastapi_redis
+                restart: always
+                ports:
+                  - "6379:6379"
+            EOF
+            
+            # Restart Services (Zero Downtime attempt)
+            docker-compose up -d --remove-orphans
+
+            # Clean up old images to save disk space
+            docker system prune -f
