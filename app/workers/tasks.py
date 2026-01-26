@@ -43,12 +43,10 @@ def generate_tts_task(
             db.add(new_audio)
             await db.commit()
             
-        return public_url
+        return {"status": "success", "audio_url": public_url}
 
-    loop = asyncio.get_event_loop()
     try:
-        audio_url = loop.run_until_complete(_async_process())
-        return {"status": "success", "audio_url": audio_url}
+        return asyncio.run(_async_process())
     except Exception as e:
         return {"status": "failed", "error": str(e)}
     
@@ -108,12 +106,9 @@ def generate_image_task(
             
             await db.commit()
             
-        return result['public_url']
-
-    loop = asyncio.get_event_loop()
+        return {"status": "success", "image_url": result['public_url']}
     try:
-        image_url = loop.run_until_complete(_async_process())
-        return {"status": "success", "image_url": image_url}
+        return asyncio.run(_async_process())
     except Exception as e:
         return {"status": "failed", "error": str(e)}
 
@@ -128,23 +123,23 @@ def generate_avatar_task(
 ):
     async def _async_process():
         async with async_session_maker() as db:
-            stmt = select(GeneratedVideo).where(GeneratedVideo.id == uuid.UUID(video_db_id))
-            video_record = (await db.execute(stmt)).scalar_one()
+            try:
+                stmt = select(GeneratedVideo).where(GeneratedVideo.id == uuid.UUID(video_db_id))
+                video_record = (await db.execute(stmt)).scalar_one()
+            except Exception as e:
+                print(f"Error fetching video record: {e}")
+                return
 
             try:
                 # Generate TTS
                 audio_url = await tts_service.generate_audio(script_text, voice_name=voice_name)
                 video_record.source_audio_url = audio_url
-                
-                # Smart Avatar Handling
-                clean_avatar_url = avatar_url
 
+                # Handle Avatar URL
+                clean_avatar_url = avatar_url
                 my_storage_domain = settings.STORAGE_PUBLIC_URL.rstrip('/')
                 
-                if avatar_url.startswith(my_storage_domain):
-                    pass 
-                else:
-                    # Sanitize external/dirty URL
+                if not avatar_url.startswith(my_storage_domain):
                     async with httpx.AsyncClient() as client:
                         img_resp = await client.get(avatar_url)
                         img_resp.raise_for_status()
@@ -156,7 +151,6 @@ def generate_avatar_task(
                             content_type="image/png"
                         )
                 
-                # Update DB
                 video_record.avatar_image_url = clean_avatar_url
                 db.add(video_record)
                 await db.commit()
@@ -172,24 +166,27 @@ def generate_avatar_task(
                 db.add(video_record)
                 await db.commit()
 
-                # Poll for Completion
+                # Long Polling
                 final_video_url = None
-                for _ in range(40):
-                    await asyncio.sleep(3)
+                for _ in range(100):
+                    await asyncio.sleep(5)
                     final_video_url = await did_service.check_status(job_id)
                     if final_video_url:
                         break
                 
                 if not final_video_url:
-                    raise Exception("Timeout waiting for D-ID generation")
+                    raise Exception("Timeout: D-ID took longer than 8 minutes.")
 
-                # Download & Finalize
+                # Download Final Video & Upload to R2
                 async with httpx.AsyncClient() as client:
-                    video_bytes = (await client.get(final_video_url)).content
+                    video_resp = await client.get(final_video_url)
+                    video_resp.raise_for_status()
+                    video_bytes = video_resp.content
 
                 r2_path = f"generated_videos/{user_id}/{uuid.uuid4()}.mp4"
                 public_url = storage.upload_file(video_bytes, r2_path, "video/mp4")
 
+                # Complete
                 video_record.status = "completed"
                 video_record.public_url = public_url
                 video_record.storage_path = r2_path
@@ -198,9 +195,8 @@ def generate_avatar_task(
 
             except Exception as e:
                 video_record.status = "failed"
-                video_record.error_message = str(e)
+                video_record.error_message = str(e)[:1000]
                 db.add(video_record)
                 await db.commit()
 
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(_async_process())
+    asyncio.run(_async_process())
