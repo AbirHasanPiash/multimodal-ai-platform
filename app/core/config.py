@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str | None = None
     GOOGLE_API_KEY: str | None = None
     DID_API_KEY: str | None = None
-    
+
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT: int = 30
@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     STORAGE_BUCKET_NAME: str
     STORAGE_REGION: str = "auto"
     STORAGE_PUBLIC_URL: str
+
+    STRIPE_SECRET_KEY: str
+    STRIPE_WEBHOOK_SECRET: str
+    
+    FRONTEND_URL: str = "http://localhost:3000"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

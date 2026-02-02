@@ -37,3 +37,9 @@ class UserResponse(BaseModel):
     wallet: WalletResponse | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserUpdateProfile(BaseModel):
+    full_name: str | None = None
+
+    model_config = ConfigDict(extra='forbid')

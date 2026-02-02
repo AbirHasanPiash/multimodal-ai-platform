@@ -15,16 +15,17 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=True)
     full_name = Column(String, nullable=True)
-    is_active = Column(Boolean, default=True)
-    is_superuser = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True, server_default=text("true"), nullable=False)
+    is_superuser = Column(Boolean, default=False, server_default=text("false"), nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
     wallet = relationship("Wallet", back_populates="user", uselist=False, cascade="all, delete-orphan")
-    chats = relationship("Chat", back_populates="user")
+    chats = relationship("Chat", back_populates="user", cascade="all, delete-orphan")
     audios = relationship("GeneratedAudio", back_populates="user", cascade="all, delete-orphan")
     images = relationship("GeneratedImage", back_populates="user", cascade="all, delete-orphan")
     videos = relationship("GeneratedVideo", back_populates="user", cascade="all, delete-orphan")
+    transactions = relationship("Transaction", back_populates="user", cascade="all, delete-orphan")
 
 
 class Wallet(Base):

@@ -70,7 +70,7 @@ jobs:
                 restart: always
                 command: uvicorn app.main:app --host 0.0.0.0 --port 8000
                 volumes:
-                  - ./secrets/google_credentials.json:/app/google_credentials.json
+                  - /home/ubuntu/secrets/google_credentials.json:/app/google_credentials.json
                 env_file: .env
                 ports:
                   - "8000:8000"
@@ -83,7 +83,7 @@ jobs:
                 restart: always
                 command: celery -A app.workers.tasks worker --loglevel=info
                 volumes:
-                  - ./secrets/google_credentials.json:/app/google_credentials.json
+                  - /home/ubuntu/secrets/google_credentials.json:/app/google_credentials.json
                 env_file: .env
                 depends_on:
                   - redis

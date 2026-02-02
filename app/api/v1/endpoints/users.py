@@ -5,7 +5,7 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User, Wallet
-from app.schemas.user import UserResponse
+from app.schemas.user import UserResponse, UserUpdateProfile
 
 router = APIRouter()
 
@@ -45,3 +45,24 @@ async def dev_top_up_credits(
     await db.commit()
     await db.refresh(wallet)
     return {"message": "Credits updated", "new_credits": wallet.credits}
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_user_me(
+    payload: UserUpdateProfile,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update own profile (Currently only supports updating full_name).
+    """
+    # Update fields if they are provided in the payload
+    if payload.full_name is not None:
+        current_user.full_name = payload.full_name
+
+    await db.commit()
+
+    # Refresh user to ensure updated_at is accurate
+    await db.refresh(current_user, attribute_names=["wallet"])
+
+    return current_user

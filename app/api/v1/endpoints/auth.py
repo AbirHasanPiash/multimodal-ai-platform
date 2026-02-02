@@ -1,5 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.future import select
 from sqlalchemy.exc import OperationalError, InterfaceError
 from google.oauth2 import id_token
@@ -8,7 +7,7 @@ import secrets
 import asyncio
 import logging
 
-from app.core.database import get_db, async_session_maker
+from app.core.database import async_session_maker
 from app.models.user import User, Wallet
 from app.schemas.user import UserCreate, Token, UserLogin, GoogleLogin
 from app.core.security import get_password_hash, verify_password, create_access_token
