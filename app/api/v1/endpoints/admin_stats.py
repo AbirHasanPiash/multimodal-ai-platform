@@ -11,32 +11,26 @@ router = APIRouter()
 
 @router.get("/overview", response_model=AdminOverviewStats)
 async def get_admin_overview(db: AsyncSession = Depends(get_db)):
-    # Calculate Grand Totals efficiently
-    
-    # Revenue (Only completed transactions)
+    # Calculate Revenue
     revenue_stmt = select(func.coalesce(func.sum(Transaction.amount), 0)).where(Transaction.status == "completed")
-    
-    # Content Counts
-    counts_stmt = select(
-        func.count(User.id).label("users"),
-        func.count(Chat.id).label("chats")
-    )
-    
-    # Costs & Tokens
+    revenue = await db.scalar(revenue_stmt)
+
+    # Calculate Counts Separately
+    user_count = await db.scalar(select(func.count(User.id)))
+    chat_count = await db.scalar(select(func.count(Chat.id)))
+
+    # Costs & Tokens (Message table only - this is safe to keep together)
     ai_metrics_stmt = select(
         func.coalesce(func.sum(Message.tokens), 0).label("tokens"),
         func.coalesce(func.sum(Message.cost), 0).label("msg_cost")
     )
-
-    # Execute totals queries
-    revenue = await db.scalar(revenue_stmt)
-    user_chat_counts = (await db.execute(counts_stmt)).first()
     ai_metrics = (await db.execute(ai_metrics_stmt)).first()
-    
+
+    # Media Counts
     img_count = await db.scalar(select(func.count(GeneratedImage.id)))
     audio_count = await db.scalar(select(func.count(GeneratedAudio.id)))
     video_count = await db.scalar(select(func.count(GeneratedVideo.id)))
-    
+
     # Calculate Total AI Cost
     img_cost = await db.scalar(select(func.coalesce(func.sum(GeneratedImage.cost), 0)))
     aud_cost = await db.scalar(select(func.coalesce(func.sum(GeneratedAudio.cost), 0)))
@@ -44,7 +38,7 @@ async def get_admin_overview(db: AsyncSession = Depends(get_db)):
     
     total_ai_cost = ai_metrics.msg_cost + img_cost + aud_cost + vid_cost
 
-    # 2. Time-Series Data (Last 30 Days)
+    # Time-Series Data (Last 30 Days)
     thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
     
     # Revenue Trend
@@ -69,8 +63,8 @@ async def get_admin_overview(db: AsyncSession = Depends(get_db)):
 
     return {
         "total_revenue": revenue,
-        "total_users": user_chat_counts.users,
-        "total_chats": user_chat_counts.chats,
+        "total_users": user_count,
+        "total_chats": chat_count,
         "total_images_generated": img_count,
         "total_audio_generated": audio_count,
         "total_videos_generated": video_count,
