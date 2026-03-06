@@ -1,4 +1,5 @@
 import stripe
+import razorpay
 import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Request, Header, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,11 +13,16 @@ from app.core.security import get_current_user
 from app.models.user import User, Wallet
 from app.models.package import Package
 from app.models.transaction import Transaction
-from app.schemas.transaction import TransactionResponse
+from app.schemas.transaction import TransactionResponse, RazorpayVerification
 from typing import List
 
 # Initialize Stripe
 stripe.api_key = settings.STRIPE_SECRET_KEY
+
+# Initialize Razorpay Client
+razorpay_client = razorpay.Client(
+    auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
+)
 
 router = APIRouter()
 
@@ -156,6 +162,121 @@ async def handle_checkout_completed(session, db: AsyncSession):
         print(f"CRITICAL ERROR in Webhook: {str(e)}")
         raise e
     
+
+# RAZORPAY ENDPOINTS
+
+@router.post("/create-razorpay-order/{package_id}")
+async def create_razorpay_order(
+    package_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Creates a Razorpay Order.
+    """
+    package = await db.get(Package, package_id)
+    if not package or not package.is_active:
+        raise HTTPException(status_code=404, detail="Package not found or inactive")
+
+    # Razorpay expects amount in the smallest currency unit (e.g., paise for INR, cents for USD)
+    amount_in_cents = int(package.price * 100)
+
+    try:
+        # Create Order on Razorpay
+        order_data = {
+            "amount": amount_in_cents,
+            "currency": "USD",
+            "receipt": f"rcpt_{str(current_user.id)[:8]}_{int(datetime.now().timestamp())}",
+            "notes": {
+                "user_id": str(current_user.id),
+                "package_id": str(package.id),
+                "credits": str(package.credits)
+            }
+        }
+        razorpay_order = await asyncio.to_thread(razorpay_client.order.create, data=order_data)
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Razorpay Error: {str(e)}")
+
+    # Create Pending Transaction Record
+    db_transaction = Transaction(
+        user_id=current_user.id,
+        package_id=package.id,
+        payment_gateway="razorpay",
+        razorpay_order_id=razorpay_order["id"],
+        amount=package.price,
+        currency="usd",
+        credits_added=package.credits,
+        status="pending"
+    )
+    db.add(db_transaction)
+    await db.commit()
+
+    return {
+        "order_id": razorpay_order["id"],
+        "amount": amount_in_cents,
+        "currency": "USD",
+        "key_id": settings.RAZORPAY_KEY_ID
+    }
+
+@router.post("/verify-razorpay-payment")
+async def verify_razorpay_payment(
+    verification_data: RazorpayVerification,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Verifies the signature returned by Razorpay after a successful client-side payment.
+    """
+    try:
+        # Verify Signature cryptographically
+        razorpay_client.utility.verify_payment_signature({
+            'razorpay_order_id': verification_data.razorpay_order_id,
+            'razorpay_payment_id': verification_data.razorpay_payment_id,
+            'razorpay_signature': verification_data.razorpay_signature
+        })
+    except razorpay.errors.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Payment signature verification failed")
+
+    # Find the pending transaction
+    result = await db.execute(
+        select(Transaction)
+        .where(Transaction.razorpay_order_id == verification_data.razorpay_order_id)
+        .where(Transaction.status == "pending")
+    )
+    transaction_record = result.scalar_one_or_none()
+
+    if not transaction_record:
+        raise HTTPException(status_code=404, detail="Valid pending transaction not found")
+
+    try:
+        # Lock Wallet for atomic update
+        result = await db.execute(
+            select(Wallet).where(Wallet.user_id == transaction_record.user_id).with_for_update()
+        )
+        wallet = result.scalar_one_or_none()
+
+        if not wallet:
+            wallet = Wallet(user_id=transaction_record.user_id, credits=0)
+            db.add(wallet)
+
+        # Update Wallet and Transaction
+        wallet.credits += transaction_record.credits_added
+        
+        transaction_record.status = "completed"
+        transaction_record.razorpay_payment_id = verification_data.razorpay_payment_id
+        transaction_record.completed_at = datetime.now(timezone.utc)
+
+        db.add(wallet)
+        db.add(transaction_record)
+        await db.commit()
+        
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to process wallet top-up")
+
+    return {"status": "success", "message": "Payment verified and credits added"}
+
 
 # PAYMENT HISTORY ENDPOINT
 @router.get("/history", response_model=List[TransactionResponse])

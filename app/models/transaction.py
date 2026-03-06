@@ -15,8 +15,14 @@ class Transaction(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     package_id = Column(UUID(as_uuid=True), ForeignKey("packages.id"), nullable=True)
     
-    # Stripe Details
-    stripe_session_id = Column(String, unique=True, index=True, nullable=False)
+    # Gateway Identifier
+    payment_gateway = Column(String, default="stripe", index=True)
+    
+    # Gateway Specific Details
+    stripe_session_id = Column(String, unique=True, index=True, nullable=True)
+    razorpay_order_id = Column(String, unique=True, index=True, nullable=True)
+    razorpay_payment_id = Column(String, unique=True, index=True, nullable=True)
+    
     amount = Column(Numeric(10, 2), nullable=False)
     currency = Column(String, default="usd")
     credits_added = Column(Numeric(18, 6), nullable=False)
